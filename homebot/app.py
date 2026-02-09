@@ -114,6 +114,5 @@ def init_webhook_route():
     return f"Webhook set to {webhook_url}/webhook: {success}"
 
 if __name__ == '__main__':
-    # Этот блок срабатывает ТОЛЬКО при локальном запуске (python app.py)
-    # В k3s (через gunicorn) он игнорируется
+ 
     app.run(host='0.0.0.0', port=5000, debug=True)
