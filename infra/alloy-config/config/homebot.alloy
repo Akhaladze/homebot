@@ -1,0 +1,29 @@
+/*
+ * Alloy Configuration for OpenTelemetry Trace Collection
+ */
+
+otelcol.receiver.otlp "homebot_receiver" {
+  http { endpoint = "0.0.0.0:14317" }
+  grpc { endpoint = "0.0.0.0:14318" }
+
+  output {
+    traces = [otelcol.processor.batch.default.input]
+    metrics = [prometheus.remote_write.mimir.receiver]
+    logs    = [loki.write.default.receiver]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+			insecure = true
+		}
+  }
+}

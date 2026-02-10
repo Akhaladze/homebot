@@ -24,6 +24,8 @@ duckdb==1.4.3
 Flask==3.1.2
 frozenlist==1.8.0
 geoip2==5.2.0
+googleapis-common-protos==1.72.0
+grpcio==1.78.0
 gunicorn==25.0.3
 idna==3.11
 importlib_metadata==8.7.1
@@ -41,6 +43,20 @@ msgpack==1.1.2
 multidict==6.7.0
 networkx==3.6.1
 numpy==2.4.1
+opentelemetry-api==1.39.1
+opentelemetry-exporter-otlp==1.39.1
+opentelemetry-exporter-otlp-proto-common==1.39.1
+opentelemetry-exporter-otlp-proto-grpc==1.39.1
+opentelemetry-exporter-otlp-proto-http==1.39.1
+opentelemetry-instrumentation==0.60b1
+opentelemetry-instrumentation-flask==0.60b1
+opentelemetry-instrumentation-logging==0.60b1
+opentelemetry-instrumentation-requests==0.60b1
+opentelemetry-instrumentation-wsgi==0.60b1
+opentelemetry-proto==1.39.1
+opentelemetry-sdk==1.39.1
+opentelemetry-semantic-conventions==0.60b1
+opentelemetry-util-http==0.60b1
 orderly-set==5.5.0
 packaging==25.0
 pandas==2.3.3
@@ -71,6 +87,7 @@ typing_extensions==4.15.0
 tzdata==2025.3
 urllib3==2.6.3
 Werkzeug==3.1.5
+wrapt==1.17.3
 yarl==1.22.0
 zipp==3.23.0
 zope.interface==8.2

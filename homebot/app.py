@@ -1,118 +1,107 @@
 import os
+import logging
 import json
-import requests
 import pandas as pd
 import duckdb
-import urllib3
-from flask import request, Flask, jsonify
-from werkzeug.middleware.proxy_fix import ProxyFix
+import requests
 from datetime import datetime
-from services.mikrotik import MikroTikService
-from homebot.services.telegrambot import tg_service
+from flask import Flask, request, jsonify, abort
+from werkzeug.middleware.proxy_fix import ProxyFix
 
+# --- OpenTelemetry Imports ---
+from opentelemetry import trace
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
+from opentelemetry.instrumentation.flask import FlaskInstrumentor
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+
+# Импорт наших сервисов
+from services.telegrambot import tg_service
+
+# --- Настройка Логирования и OTel ---
+# Имя сервиса для Tempo/Loki
+resource = Resource.create(attributes={"service.name": "iot-homebot", "service.namespace": "home-lab"})
+
+# Провайдер трейсинга
+trace.set_tracer_provider(TracerProvider(resource=resource))
+
+# Экспортер в Alloy (по умолчанию localhost:14317, берем из ENV)
+otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://10.10.100.20:14317")
+otlp_exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
+
+# Batch processor (отправляет пачками для эффективности)
+span_processor = BatchSpanProcessor(otlp_exporter)
+trace.get_tracer_provider().add_span_processor(span_processor)
+
+# Инструментация (автоматический сбор данных)
+LoggingInstrumentor().instrument(set_logging_packages=True) # Добавляет TraceID в логи
+RequestsInstrumentor().instrument() # Трейсит исходящие запросы (requests.get)
+
+# Стандартный логгер Python
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s [%(name)s] [trace_id=%(otelTraceID)s] %(message)s')
+logger = logging.getLogger(__name__)
+
+# --- Инициализация Flask ---
 app = Flask(__name__)
-
-
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-# Constants
-DB_NAME = "network.db"
-PARQUET_DIR = "data"
+# Инструментация Flask (трейсит входящие запросы)
+FlaskInstrumentor().instrument_app(app)
 
-# Initialize MikroTik service (Берем из ENV, которые мы настроили в k3s)
-MIKROTIK_HOST = os.getenv("MIKROTIK_HOST", "10.10.100.1")
-MIKROTIK_USER = os.getenv("MIKROTIK_USER", "homebot")
-MIKROTIK_PASSWORD = os.getenv("MIKROTIK_PASSWORD") # Пароль берем только из ENV!
+# --- Инициализация Mikrotik (если нужен) ---
+# from services.mikrotik import MikroTikService
+# mt_service = MikroTikService(...) 
 
-mt_service = MikroTikService(MIKROTIK_HOST, MIKROTIK_USER, MIKROTIK_PASSWORD)
-
-# Disable SSL warnings for self-signed certificates
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-def probe_shelly(ip):
-    # ... (ваш код без изменений) ...
-    try:
-        res = requests.get(f"http://{ip}/rpc/Shelly.GetStatus", timeout=3)
-        if res.status_code == 200:
-            return {"gen": 2, "data": res.json()}
-    except:
-        pass
-    
-    try:
-        res = requests.get(f"http://{ip}/status", timeout=3)
-        if res.status_code == 200:
-            return {"gen": 1, "data": res.json()}
-    except:
-        pass
-    return None
-
-@app.route('/sync-all', methods=['POST', 'GET']) # Разрешил POST для webhook вызова
-def sync_all():
-    # ... (ваш код без изменений) ...
-    try:
-        raw_leases = mt_service.get_dhcp_leases()
-        df_leases = pd.DataFrame(raw_leases)
-        
-        os.makedirs(PARQUET_DIR, exist_ok=True)
-        df_leases.to_parquet(f"{PARQUET_DIR}/leases_latest.parquet", engine='pyarrow', index=False)
-
-        with duckdb.connect(DB_NAME) as con:
-            con.execute("CREATE TABLE IF NOT EXISTS raw_leases AS SELECT * FROM df_leases WHERE 1=0")
-            con.execute("DELETE FROM raw_leases")
-            con.execute("INSERT INTO raw_leases SELECT * FROM df_leases")
-            # ... остальная логика базы данных ...
-            con.execute("""
-                CREATE OR REPLACE VIEW active_shelly AS 
-                SELECT address as ip, "host-name" as hostname FROM raw_leases 
-                WHERE "host-name" ILIKE 'shelly%'
-            """)
-            shelly_ips = con.execute("SELECT ip, hostname FROM active_shelly").fetchall()
-
-        results = []
-        scan_time = datetime.now()
-        for ip, hostname in shelly_ips:
-            info = probe_shelly(ip)
-            if info:
-                results.append({
-                    "scanned_at": scan_time,
-                    "ip": ip,
-                    "hostname": hostname,
-                    "gen": info["gen"],
-                    "raw_status": json.dumps(info["data"])
-                })
-
-        if results:
-            df_shelly = pd.DataFrame(results)
-            # ... сохранение parquet ...
-
-        return jsonify({"status": "success", "synced_shelly": len(results)})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+@app.route('/')
+def index():
+    logger.info("Index page accessed")
+    return jsonify({"status": "running", "otel": "enabled"})
 
 # --- Webhook Endpoint ---
 @app.route('/webhook', methods=['POST'])
 def telegram_webhook():
     if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        # Передаем обновление в телеграм сервис
-        update = tg_service.process_new_updates([telebot.types.Update.de_json(json_string)])
-        return 'OK', 200
+        try:
+            json_string = request.get_data().decode('utf-8')
+            # Передаем обновление в телеграм сервис
+            if tg_service:
+                tg_service.process_update(json_string)
+            return 'OK', 200
+        except Exception as e:
+            logger.error(f"Error processing webhook: {e}", exc_info=True)
+            return jsonify({"error": "Internal Error"}), 500
     else:
-        return jsonify({"error": "Forbidden"}), 403
+        abort(403)
 
-# Эндпоинт для инициализации вебхука (чтобы не дергать curl вручную)
 @app.route('/init-webhook', methods=['GET'])
 def init_webhook_route():
-    webhook_url = os.getenv("WEBHOOK_URL") # https://api.cloudpak.info
-    if not webhook_url:
-        return "WEBHOOK_URL env not set", 500
+    if not tg_service:
+        return jsonify({"error": "Bot service not initialized"}), 500
     
-    # Удаляем и ставим заново
-    tg_service.bot.remove_webhook()
-    success = tg_service.bot.set_webhook(url=f"{webhook_url}/webhook")
-    
-    return f"Webhook set to {webhook_url}/webhook: {success}"
+    try:
+        updated = tg_service.setup_webhook()
+        return jsonify({"status": "success", "updated": updated, "url": tg_service.webhook_url})
+    except Exception as e:
+        logger.error(f"Failed to set webhook: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/sync-all', methods=['POST'])
+def sync_all():
+    # Трейсер можно получить вручную для кастомных спанов
+    tracer = trace.get_tracer(__name__)
+    with tracer.start_as_current_span("sync_logic"):
+        logger.info("Starting sync process...")
+        # ... твоя логика с pandas и duckdb ...
+        # Пример:
+        # with tracer.start_as_current_span("mikrotik_fetch"):
+        #     leases = mt_service.get_dhcp_leases()
+        return jsonify({"status": "simulated_success"})
 
 if __name__ == '__main__':
- 
+    # При локальном запуске
+    logger.info("Starting Flask app locally...")
     app.run(host='0.0.0.0', port=5000, debug=True)

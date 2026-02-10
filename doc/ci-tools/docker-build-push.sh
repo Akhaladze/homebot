@@ -9,4 +9,7 @@ docker push akhaladze/iot-homebot:latest
 
 
 # 4. compose variant
-docker compose build && docker compose push &&  docker compose up 
+docker compose build && docker compose push &&  docker compose up
+
+# 5. Delete old pod
+kubectl delete pod -l app=iot-homebot -n homebot

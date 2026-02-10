@@ -2,8 +2,8 @@
 prometheus.scrape "k3s_nodes" {
     // List your k3s node IPs here
     targets = [
-        { "__address__" = "192.168.1.50:10250", instance = "k3s-master" },
-        { "__address__" = "192.168.1.51:10250", instance = "k3s-worker-1" },
+        { "__address__" = "10.10.100.21:10250", instance = "k3s-master" },
+        { "__address__" = "10.10.100.20:10250", instance = "k3s-worker-1" },
     ]
 
     scheme = "https"
@@ -19,7 +19,7 @@ prometheus.scrape "k3s_nodes" {
     metrics_path = "/metrics/cadvisor" 
     
     // Add helpful labels
-    relabel_rules = discovery.relabel.k3s_relabel.rules
+    // relabel_rules = discovery.relabel.k3s_relabel.rules
 
     forward_to = [prometheus.remote_write.default.receiver]
 }

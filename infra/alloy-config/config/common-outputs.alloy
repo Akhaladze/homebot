@@ -1,7 +1,18 @@
+
+livedebugging {
+  enabled = true
+}
+
+clustering {
+  enabled = true
+}
+
+
+
 // Define the destination for metrics (Mimir/Prometheus)
 prometheus.remote_write "default" {
     endpoint {
-        url = "http://mimir:9009/api/v1/push"
+        url = "http://prometheus:9009/api/v1/push"
     }
 }
 
@@ -20,3 +31,4 @@ prometheus.scrape "alloy_scraper" {
     targets    = prometheus.exporter.self.alloy_health.targets
     forward_to = [prometheus.remote_write.default.receiver]
 }
+
