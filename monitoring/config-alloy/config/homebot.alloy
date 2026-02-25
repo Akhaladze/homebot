@@ -1,0 +1,59 @@
+/*
+ * Alloy Configuration for OpenTelemetry Trace Collection
+ */
+
+otelcol.receiver.otlp "homebot_receiver" {
+  grpc { endpoint = "0.0.0.0:14317" }
+  http { endpoint = "0.0.0.0:14318" }
+
+  output {
+    // Конвертируем OTLP логи в формат Loki
+    logs   = [otelcol.exporter.loki.to_loki.input]     
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+// Мост между OpenTelemetry и Loki
+otelcol.exporter.loki "to_loki" {
+  forward_to = [loki.process.parse_otel.receiver]
+}
+
+loki.process "parse_otel" {
+  stage.json {
+    expressions = { 
+      "service" = "resources.service_name", 
+      "level"   = "severity_text", 
+    }
+  }
+  
+  stage.labels {
+    values = { 
+      "service" = "service",
+      "level"   = "level", 
+    }
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    // Используем имя из вашего окружения
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
+    }
+  }
+}

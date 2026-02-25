@@ -15,10 +15,10 @@ distributor:
           endpoint: "tempo:4317"
         http:
           endpoint: "tempo:4318"
-  log_received_spans:
-      enabled: true
-  log_discarded_spans:
-      enabled: true
+  #log_received_spans:
+  #    enabled: true
+  #  log_discarded_spans:
+  #    enabled: true
 
 backend_scheduler:
   provider:
@@ -57,13 +57,13 @@ storage:
   trace:
     backend: s3
     s3:
-      bucket: tempo-bucket
+      bucket: tempo
       endpoint: minio:9000
-      access_key: tempo_user
-      secret_key: tempo_password
+      access_key: tempo
+      secret_key: supersecret
       insecure: true
     wal:
-      path: /var/tempo/wal
+      path: /var/tempo/wal # where to store the wal locally
 
 overrides:
   defaults:

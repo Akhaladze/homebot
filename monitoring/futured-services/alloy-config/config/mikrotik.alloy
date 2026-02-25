@@ -34,7 +34,7 @@ prometheus.exporter.snmp "mikrotik_snmp" {
     
     // Define targets to scrape
     target "router_main" {
-        address = "192.168.88.1" // IP of your MikroTik
+        address = "10.10.100.1" // IP of your MikroTik
         module  = "mikrotik"     // Module name defined in snmp.yml
         auth    = "public_v2"    // Auth name defined in snmp.yml (usually community string)
     }

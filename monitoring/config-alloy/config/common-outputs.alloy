@@ -3,16 +3,16 @@ livedebugging {
   enabled = true
 }
 
-clustering {
-  enabled = true
-}
+//clustering {
+//  enabled = true
+//}
 
 
 
 // Define the destination for metrics (Mimir/Prometheus)
 prometheus.remote_write "default" {
     endpoint {
-        url = "http://prometheus:9009/api/v1/push"
+        url = "http://prometheus:9090/api/v1/push"
     }
 }
 
