@@ -26,29 +26,24 @@ A comprehensive system for monitoring, managing, and analyzing a smart home/offi
 │       └───mikrotik.py    # Mikrotik API Client
 ├───data/                  # Local storage for Parquet files and DuckDB
 └───doc/                   # Additional Documentation
+    └───development_workflow.md # Detailed workflow, integration, and step-by-step guides
 ```
 
-## Setup & Configuration
+## Environment Variables and Setup
 
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository-url>
-    cd iot
-    ```
+Before running, you must configure the required environment variables by copying the example file.
 
-2.  **Environment Variables:**
-    Copy the example configuration file and update it with your actual credentials.
+1.  **Copy Configuration Template:**
     ```bash
     cp .env_example .env
     ```
-    Edit `.env`:
-    ```ini
-    MIKROTIK_HOST=10.10.100.1
-    MIKROTIK_USER=homebot
-    MIKROTIK_PASSWORD=your_secure_password
-    ```
+2.  **Edit `.env`:** Populate with operational credentials. Required variables include:
+    *   `MIKROTIK_HOST`, `MIKROTIK_USER`, `MIKROTIK_PASSWORD`
+    *   `TELEGRAM_BOT_TOKEN`
+    *   `SHELLEY_API_BASE_URL` (If polling directly)
+    *   Database configuration (e.g., `DUCKDB_PATH`)
 
-## Running the Application
+## How to Run Instructions
 
 ### Option 1: Python (Local Development)
 
@@ -57,12 +52,10 @@ A comprehensive system for monitoring, managing, and analyzing a smart home/offi
     python3 -m venv venv
     source venv/bin/activate
     ```
-
 2.  **Install dependencies:**
     ```bash
     pip install -r homebot/requirements.txt
     ```
-
 3.  **Run the application:**
     ```bash
     python homebot/app.py
@@ -75,12 +68,10 @@ A comprehensive system for monitoring, managing, and analyzing a smart home/offi
     ```bash
     docker-compose up -d --build
     ```
-
 2.  **View logs:**
     ```bash
     docker-compose logs -f
     ```
-
 3.  **Stop the service:**
     ```bash
     docker-compose down
@@ -90,7 +81,7 @@ A comprehensive system for monitoring, managing, and analyzing a smart home/offi
 
 We employ a hybrid data collection strategy to handle the diverse nature of our IoT and network devices, ensuring both historical depth and real-time responsiveness.
 
-### 1. Data Collection Strategy
+### Data Collection Strategy
 
 The system distinguishes between data that needs to be actively polled and real-time events pushed by devices.
 
@@ -99,35 +90,7 @@ The system distinguishes between data that needs to be actively polled and real-
 *   **Event-Driven (Push):** Used for real-time telemetry and alerts.
     *   *Example:* MQTT messages from Shelly sensors (power, temperature) or HikVision camera motion alerts.
 
-### 2. Service Integration
-
-We are building specialized services for data ingestion and enrichment:
-
-*   **`services/mikrotik`:** (Active) Connects to the Mikrotik REST API to fetch comprehensive network data:
-    *   **DHCP Leases:** Foundation for Device Inventory.
-    *   **Kid Control:** Monitoring managed devices.
-    *   **Active Services:** Auditing running router services.
-    *   **Wireless Registrations:** Tracking WiFi client signal and status.
-    *   **ARP Table:** Network layer address resolution.
-    *   **Firewall Rules:** Filter, NAT, Mangle, and Connection tracking.
-*   **`services/hikvision`:** Retrieves device configuration and captures high-resolution snapshots from security cameras.
-*   **`services/weather`:** Fetches real-time and historical weather data (temperature, humidity, precipitation) for the local area.
-*   **`services/geoip`:** Resolves IP addresses to geographical locations (City, Country) using local GeoLite2 databases.
-*   **Future Services:**
-    *   **`cloud-screenshot-analysis`:** Triggered by motion events; uploads camera snapshots to a cloud AI service for object detection/classification.
-
-### 3. Analytics Workflow
-
-Our data pipeline transforms raw signals into actionable insights:
-
-1.  **Ingestion:** Data is collected via Services (API) or MQTT Brokers.
-2.  **Raw Storage:** All incoming data is first saved as **Parquet** files for efficient columnar storage and history preservation.
-3.  **Manual Analytics:** Data scientists/engineers can directly query Parquet files for ad-hoc analysis.
-4.  **Transformation (DBT):** We use **DBT (Data Build Tool)** to define SQL models. These models clean, deduplicate, and aggregate the raw data.
-    *   *Specific Use Case:* Creating the `Inventory` table by combining Mikrotik DHCP data with static device metadata.
-5.  **Data Warehouse (DuckDB):** The processed models are loaded into **DuckDB** for high-performance analytical querying and dashboarding.
-
-### 4. Architecture Diagrams
+### Architecture Diagrams
 
 #### High-Level Data Flow
 
@@ -188,12 +151,22 @@ sequenceDiagram
     DBT->>WH: Materialize Tables/Views (e.g. Inventory)
 ```
 
-### 5. Step-by-Step Implementation Example
+## Project REST API Calls
 
-This outlines the practical execution flow for our core use case—managing device inventory and collecting power metrics.
+The primary API layer is served via Flask in [`homebot/app.py`](homebot/app.py). All endpoints require an appropriate authorization token (managed via the bot interface or environment).
 
-1.  **Fetch Device Data (Source):** The `mikrotik` service queries the router's DHCP server to get a list of all currently assigned IP addresses and associated MAC addresses.
-2.  **Build Inventory (Transformation):** We create an `inventory` table. This is done by joining the live DHCP data with a static `device_metadata.csv` seed file (containing owner, location, device type). This gives us a trusted list of *what* is on the network.
-3.  **Targeted Polling (Enrichment):** The system uses the `inventory` table to identify active Shelly devices. It then specifically polls these IP addresses to get detailed status (power usage, temperature, relay state).
-4.  **Persist Data (Storage):** The results of these polls are immediately written to local disk as time-partitioned **Parquet** files (e.g., `data/shelly_raw.parquet`).
-5.  **Analytics (Aggregation):** Finally, DBT runs scheduled transformations to read the Parquet files, aggregate the metrics (e.g., "Daily Power Consumption by Room"), and load the clean results into **DuckDB** for visualization.
+**Key Endpoints:**
+
+*   `GET /api/v1/inventory`: Retrieves the current device inventory populated from Mikrotik data and enriched with metadata.
+*   `GET /api/v1/metrics/{device_id}`: Fetches the latest time-series telemetry data for a specific IoT device (Shelly).
+*   `POST /api/v1/command/{device_id}`: Sends an atomic command to a managed device (e.g., toggle a relay, reboot a device). *Note: Physical actions require Telegram confirmation.*
+*   `GET /api/v1/status/network`: Returns aggregated network health metrics pulled from the Mikrotik API wrapper.
+
+## TelegramBot Integration
+
+The user interaction layer is handled by an `aiogram` bot, utilizing inline keyboards for command execution and state management.
+
+*   **Core Logic:** Handlers are located in [`homebot/bot/handlers/`](homebot/bot/handlers/).
+*   **State Management:** The bot maintains user sessions and command contexts.
+*   **Action Confirmation:** Critical hardware control actions (e.g., door locks, high-current relays) **MUST** implement a confirmation step via inline keyboard replies before executing the corresponding API call to prevent accidental changes. This logic resides primarily in handlers like [`homebot/bot/handlers/security.py`](homebot/bot/handlers/security.py).
+*   **Configuration:** The bot token is loaded from the `TELEGRAM_BOT_TOKEN` environment variable.

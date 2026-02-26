@@ -1,0 +1,5 @@
+- Use PEP 8 for Python code style.
+- Telegram UI: Use InlineKeyboardMarkup for all menus.
+- Logging: All critical actions (opening locks, system errors) must be logged to DuckDB.
+- Hardware Safety: Always implement a confirmation step in Telegram before triggering physical actions like 'Open Lock'.
+- Networking: Assume the developer machine (10.10.100.20) is the bridge between k3s and the local environment.

@@ -6,7 +6,7 @@ import sys
 # Add project root to sys.path to allow importing 'homebot' modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from homebot.app import app
+from homebot.app import create_app
 from homebot.tasks import (
     collect_mikrotik_data,
     collect_shelly_metrics,
@@ -15,9 +15,11 @@ from homebot.tasks import (
     process_data
 )
 
+from aiohttp import web
+
 def run_api():
-    """Runs the Flask API."""
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    """Runs the aiohttp API."""
+    web.run_app(create_app(), host='0.0.0.0', port=5000)
 
 def run_scheduler(task_func, interval, *args, **kwargs):
     """Generic loop for running a task at a set interval."""
@@ -28,6 +30,10 @@ def run_scheduler(task_func, interval, *args, **kwargs):
         time.sleep(interval)
         task_func(*args, **kwargs)
 
+def sync_and_process():
+    collect_mikrotik_data()
+    process_data()
+
 if __name__ == '__main__':
     # Load Intervals
     SYNC_INTERVAL = int(os.getenv("SYNC_INTERVAL_SECONDS", 600))
@@ -35,6 +41,8 @@ if __name__ == '__main__':
     HIK_CONFIG_INTERVAL = int(os.getenv("HIKVISION_CONFIG_INTERVAL_SECONDS", 3600))
     HIK_SHOT_INTERVAL = int(os.getenv("HIKVISION_SCREENSHOT_INTERVAL_SECONDS", 300))
     WEATHER_INTERVAL = int(os.getenv("WEATHER_SYNC_INTERVAL_SECONDS", 1800))
+    HIK_VISION_USER=str(os.getenv("HIK_VISION_USER", "homebot"))
+    HIK_VISION_PASS=str(os.getenv("HIK_VISION_PASS", "homebot_pass"))
 
     processes = []
 
@@ -45,9 +53,6 @@ if __name__ == '__main__':
     # 2. Mikrotik Lease Sync (Inventory)
     # Also triggers data processing after sync usually, or we run processing separately.
     # Let's chain them: Sync -> Process
-    def sync_and_process():
-        collect_mikrotik_data()
-        process_data()
 
     p_sync = multiprocessing.Process(
         target=run_scheduler, 

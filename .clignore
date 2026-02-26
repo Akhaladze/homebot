@@ -1,0 +1,28 @@
+# База данных DuckDB (она бинарная, AI всё равно её не прочитает)
+*.duckdb
+*.db
+data/
+
+# Окружение и кэш
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Секреты
+.env
+
+# Сборка и Docker
+*.tar
+*.iso
+
+# Other
+.github/
+cert/
+doc/
+infra/
+k3s/
+k8s/
+homebot/data/
+homebot/__pycache__
+monitoring/

@@ -15,3 +15,5 @@ network.db
 .env
 cert/
 infra/
+homebot/data/
+homebot/__pycache__

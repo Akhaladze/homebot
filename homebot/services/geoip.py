@@ -2,7 +2,7 @@ import geoip2.database
 import os
 
 class GeoIPService:
-    def __init__(self, db_path="data/GeoLite2-City.mmdb"):
+    def __init__(self, db_path="homebot/data/GeoLite2-City.mmdb"):
         self.db_path = db_path
         self.reader = None
         if os.path.exists(self.db_path):
